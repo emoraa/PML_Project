@@ -1,0 +1,141 @@
+---
+title: "Predicting weight-lifting styles"
+output:
+  html_document:
+    theme: cerulean
+  pdf_document: default
+date: "15th of december 2014"
+---
+
+<!-- For more info on RMarkdown see http://rmarkdown.rstudio.com/ -->
+
+<!-- Enter the code required to load your data in the space below. The data will be loaded but the line of code won't show up in your write up (echo=FALSE) in order to save space-->
+```{r echo=FALSE}
+
+```
+
+<!-- In the remainder of the document, add R code chunks as needed -->
+
+### Introduction:
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+
+### Data Processing and Transformation:
+
+**Data set definition:** :
+The data set had been created during an experiment. Directly from the paper "Qualitative Activity Recognition of Weight Lifting Exercises":
+
+"Participants were asked to perform one set of 10 repetitions
+of the Unilateral Dumbbell Biceps Curl in five different fashions:
+exactly according to the specification (Class A), throwing
+the elbows to the front (Class B), lifting the dumbbell
+only halfway (Class C), lowering the dumbbell only halfway
+(Class D) and throwing the hips to the front (Class E). Class
+A corresponds to the specified execution of the exercise,
+while the other 4 classes correspond to common mistakes.
+Participants were supervised by an experienced weight lifter
+to make sure the execution complied to the manner they
+were supposed to simulate. The exercises were performed by
+six male participants aged between 20-28 years, with little
+weight lifting experience. We made sure that all participants
+could easily simulate the mistakes in a safe and controlled
+manner by using a relatively light dumbbell (1.25kg).
+"
+
+
+** Data retrieval **
+
+The first step is setup the R environment and retrieve the necessary data:
+
+```{r}
+
+library(caret)
+library(corrplot)
+
+mydata <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+mydata_testing <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+
+```
+
+
+** Data Preparation **
+
+Now we have the data downloaded and ready. The next step is split the data set for training also in a training and testing data sets.
+
+```{r}
+
+inTrain = createDataPartition(y=mydata$classe, p=0.70, list=FALSE)
+training = mydata[inTrain,]
+testing = mydata[-inTrain,]
+
+```
+
+A very simple data review allow us to see that there are a lot of NA's values in the data set. The main reason is because there are some variables that are the aggregation of other. We can see that the "new_window" measurements are the aggregation of the other measurements of the his own window. The variables like kurtosi, avg or max / min can only be calculated using the others. 
+
+The main idea here is to avoid this "aggregation" variables.
+
+```{r}
+
+na_training = sapply(training, function(x) {sum(is.na(x))})
+table(na_training)
+na_columns = names(na_training[na_training>=13454])
+training = training[,!names(training) %in% na_columns]
+testing = testing[,!names(testing) %in% na_columns]
+
+```
+
+
+
+### Exploratory data analysis###
+
+In this section we are going to make an exploratory data analysis. Fisrt we can make a simple histogram about the target variable: classe
+
+```{r}
+
+plot(mydata$classe)
+
+```
+
+But, a very interesting analysis could be about the correlation level between the variables. In order to perform this analysis we need to avoid some columns with a low variance level.
+
+```{r}
+library(corrplot)
+no_necessary = c("row.names","X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp","new_window","num_window","amplitude_yaw_belt","amplitude_yaw_dumbbell","amplitude_yaw_forearm")
+training_corr = training[,!names(training) %in% no_necessary]
+cor.dat <- cor(subset(training_corr, select=-c(classe)))
+tc_sub = subset(training_corr, select=-c(classe))
+tc_sub.scale<- scale(tc_sub,center=TRUE,scale=TRUE)
+cortc_sub = cor(tc_sub.scale)
+corrplot(cortc_sub)
+```
+
+As we can see in the plot, there are some variables heavily correlated.
+
+
+### Model generation ###
+
+We are going to use the Random Forest algorithm with a 4-fold cross validation train algorithm.
+
+```{r}
+library(caret)
+modelFit = train(training$classe ~., method="rf", data= training,  trControl = trainControl(method = "cv", number = 4, allowParallel = TRUE))
+modelFit
+
+```
+
+
+### Testing the Model ###
+
+Using the testing set we can see high the model accuracy reached.
+
+```{r}
+library(caret)
+testing_pred = predict(modelFit,testing)
+confusionMatrix(testing_pred, testing$classe)
+
+```
+
+
+
+
+
